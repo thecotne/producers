@@ -1,9 +1,8 @@
-
 {
   "name": "@thecotne/producers",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "create files programmatically",
+  "description": "Create Files Programmatically",
   "bin": {
     "producers-cli": "./bin/run"
   },
@@ -15,6 +14,9 @@
     "url": "git+https://github.com/thecotne/producers.git"
   },
   "author": "Tsotne Nazarashvili <cotne.nazarashvili@gmail.com>",
+  "engines": {
+    "node": "^16.4.0"
+  },
   "bugs": {
     "url": "https://github.com/thecotne/producers/issues"
   },
@@ -29,14 +31,17 @@
     "@types/watchpack": "^1.1.6",
     "baconjs": "^3.0.17",
     "chalk": "^4.1.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.3.5",
     "watchpack": "^2.1.1"
   },
-  "main": "lib/index.js",
+  "main": "src/index.ts",
   "oclif": {
     "bin": "producers-cli"
   },
   "files": [
+    "/tsconfig.json",
     "/bin",
-    "/lib"
+    "/src"
   ]
 }

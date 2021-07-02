@@ -5,38 +5,64 @@ import { promises as fs } from 'fs'
 import path = require('path')
 import Watchpack = require('watchpack')
 
-const frontendJsDir = root('workspaces/frontend')
-
-function abs (src: string): string {
-  return path.resolve(__dirname, src)
-}
-
-function root (src: string = ''): string {
-  return path.resolve(abs('../../..'), src)
-}
-
-function isProducer (src: string): boolean {
+export function isProducer (src: string): boolean {
   return /_producer\.ts$/.test(src)
 }
 
-interface ProducedFile {
+export function createProducer(fn: Producer): Producer {
+  return fn
+}
+
+export type UniversalIterable<T> =
+  | AsyncIterable<T>
+  | (() => AsyncIterable<T>)
+  | Iterable<T>
+  | (() => Iterable<T>)
+
+export function makeAsyncIterable<T>(value: UniversalIterable<T>): AsyncIterable<T>  {
+  const iterable = typeof value === 'function' ? value() : value
+
+  return (async function* () {
+    for await (const value of iterable) {
+      yield value
+    }
+  })()
+}
+
+export async function array<T> (iterable: UniversalIterable<T>): Promise<readonly T[]> {
+  const arr = []
+
+  for await (const entry of makeAsyncIterable(iterable)) {
+    arr.push(entry)
+  }
+
+  return arr
+}
+
+export async function file (path: string, iterable: UniversalIterable<string>): Promise<ProducedFile> {
+  return {
+    path,
+    content: (await array(makeAsyncIterable(iterable))).join('\n')
+  }
+}
+export interface ProducedFile {
   readonly content: string
   readonly path: string
 }
 
-type Producer = (files: string[]) => readonly ProducedFile[]
+export type Producer = (files: readonly string[]) => Promise<readonly ProducedFile[]>
 
 const knownProducers: string[] = []
 
 function requireProducer (src: string): Producer {
-  const modulePath = require.resolve(root(path.resolve(frontendJsDir, src)))
+  const modulePath = require.resolve(src)
 
   knownProducers.push(modulePath)
 
-  return require(modulePath)
+  return require(modulePath).default
 }
 
-async function walk (dirPath: string, base?: string): Promise<string[]> {
+async function walk (dirPath: string, base?: string): Promise<readonly string[]> {
   return await array(scandir(dirPath, base))
 }
 
@@ -54,29 +80,22 @@ async function * scandir (dirPath: string, base?: string): AsyncIterable<string>
   }
 }
 
-async function array<T> (iterable: AsyncIterable<T>): Promise<T[]> {
-  const arr = []
+async function executeProducersOnFiles (dir: string, check: boolean, watch: boolean): Promise<number> {
+  const files: readonly string[] = await walk(dir)
 
-  for await (const entry of iterable) {
-    arr.push(entry)
-  }
-
-  return arr
-}
-
-async function executeProducersOnFiles (files: string[], check: boolean, watch: boolean): Promise<number> {
   let exitCode = 0
 
   const producers = files.filter(isProducer)
 
   for (const producerPath of producers) {
-    const producer = requireProducer(producerPath)
+    const producer = requireProducer(path.resolve(dir, producerPath))
+
     const currentProducedFiles = producer(files)
 
-    if (!watch) console.info(blue(`[PRODUCE] ${path.relative(root(), producerPath)}`))
+    if (!watch) console.info(blue(`[PRODUCE] ${producerPath}`))
 
-    for (const file of currentProducedFiles) {
-      const filePath = path.relative(root(), file.path)
+    for (const file of await currentProducedFiles) {
+      const filePath = path.relative(dir, file.path)
 
       let content = ''
 
@@ -86,11 +105,11 @@ async function executeProducersOnFiles (files: string[], check: boolean, watch: 
 
       if (file.content !== content) {
         if (check) {
-          if (watch) console.info(blue(`[PRODUCE] ${path.relative(root(), producerPath)}`))
+          if (watch) console.info(blue(`[PRODUCE] ${producerPath}`))
           console.info(red(`  [ERROR] ${filePath}`))
           exitCode = 1
         } else {
-          if (watch) console.info(blue(`[PRODUCE] ${path.relative(root(), producerPath)}`))
+          if (watch) console.info(blue(`[PRODUCE] ${producerPath}`))
           console.info(yellow(`  [FIXED] ${filePath}`))
           await fs.writeFile(file.path, file.content)
         }
@@ -103,17 +122,15 @@ async function executeProducersOnFiles (files: string[], check: boolean, watch: 
   return exitCode
 }
 
-async function executeProducers (check: boolean, watch: boolean): Promise<number | void> {
-  if (!watch) {
-    return await executeProducersOnFiles((await walk(frontendJsDir)), check, watch)
-  }
+async function executeProducers (dir: string, check: boolean, watch: boolean): Promise<number | void> {
+  const status = await executeProducersOnFiles(dir, check, watch)
 
-  await executeProducersOnFiles((await walk(frontendJsDir)), check, watch)
+  if (!watch) return status
 
   const changes = Bacon.fromBinder<{readonly path: string, readonly time: number | null, readonly event: string}>(sink => {
     const wp = new Watchpack({})
 
-    wp.watch([], [frontendJsDir])
+    wp.watch([], [dir])
     wp.on('change', (path: string, time: number, event: string) => void sink({ path, time, event }))
 
     return () => void wp.close()
@@ -129,15 +146,20 @@ async function executeProducers (check: boolean, watch: boolean): Promise<number
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
           knownProducers.forEach(producer => void delete require.cache[producer])
 
-          return void executeProducersOnFiles(await walk(frontendJsDir), check, watch)
+          return void executeProducersOnFiles(dir, check, watch)
         }
       }
     })
 }
 
-class ProducersCliCommand extends Command {
-  static description = ''
-
+export default class ProducersCliCommand extends Command {
+  static description = 'Create Files Programmatically'
+  static args = [
+    {
+      name: 'DIR',
+      required: true,
+    }
+  ]
   static flags = {
     help: flags.help(),
     check: flags.boolean({ default: false, description: 'Just check files' }),
@@ -145,12 +167,14 @@ class ProducersCliCommand extends Command {
   }
 
   async run (): Promise<void> {
-    const { flags: { check, watch } } = this.parse(ProducersCliCommand)
+    const options = this.parse(ProducersCliCommand)
 
-    const exitCode = await executeProducers(check, watch)
+    const exitCode = await executeProducers(
+      path.resolve(process.cwd(), options.args.DIR),
+      options.flags.check,
+      options.flags.watch
+    )
 
     if (typeof exitCode === 'number') this.exit(exitCode)
   }
 }
-
-export = ProducersCliCommand
