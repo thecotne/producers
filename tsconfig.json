@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "importHelpers": true,
+    "jsx": "react",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "strict": true,
+    "lib": ["ESNext", "DOM"],
+    "noEmit": true,
+    "typeRoots": ["./node_modules/@types"],
+    "downlevelIteration": true,
+    "target": "ESNext",
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true
+  },
+  "include": [
+    "src/*",
+    "src/**/*"
+  ]
+}
