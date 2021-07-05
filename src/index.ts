@@ -9,48 +9,79 @@ export function isProducer (src: string): boolean {
   return /_producer\.ts$/.test(src)
 }
 
-export function createProducer(fn: Producer): Producer {
+export function createProducer (fn: Producer): Producer {
   return fn
 }
 
-export type UniversalIterable<T> =
-  | AsyncIterable<T>
-  | (() => AsyncIterable<T>)
+export type Arrayable<T> =
   | Iterable<T>
   | (() => Iterable<T>)
 
-export function makeAsyncIterable<T>(value: UniversalIterable<T>): AsyncIterable<T>  {
-  const iterable = typeof value === 'function' ? value() : value
+export type AsyncArrayable<T> =
+  | AsyncIterable<T>
+  | (() => AsyncIterable<T>)
 
-  return (async function* () {
-    for await (const value of iterable) {
-      yield value
+export type UniversalArrayable<T> =
+  | Arrayable<T>
+  | AsyncArrayable<T>
+
+export function array<T, V extends Arrayable<T>> (value: V): readonly T[]
+export function array<T, V extends AsyncArrayable<T>> (value: V): Promise<readonly T[]>
+export function array<T, V extends UniversalArrayable<T>> (value: V): readonly T[] | Promise<readonly T[]>
+export function array<T, V extends UniversalArrayable<T>> (value: V): readonly T[] | Promise<readonly T[]> {
+  const iterable: Iterable<T> | AsyncIterable<T> = typeof value === 'function'
+    ? value()
+    : value
+
+  const arr: T[] = []
+
+  if (Symbol.asyncIterator in iterable) {
+    // eslint-disable-next-line no-async-promise-executor, @typescript-eslint/no-misused-promises
+    return new Promise(async resolve => {
+      for await (const entry of iterable) {
+        arr.push(entry)
+      }
+
+      resolve(arr)
+    })
+  } else {
+    for (const entry of iterable as Iterable<T>) {
+      arr.push(entry)
     }
-  })()
-}
-
-export async function array<T> (iterable: UniversalIterable<T>): Promise<readonly T[]> {
-  const arr = []
-
-  for await (const entry of makeAsyncIterable(iterable)) {
-    arr.push(entry)
   }
 
   return arr
 }
 
-export async function file (path: string, iterable: UniversalIterable<string>): Promise<ProducedFile> {
-  return {
-    path,
-    content: (await array(makeAsyncIterable(iterable))).join('\n')
+export function file< V extends Arrayable<string>> (path: string, value: V): ProducedFile
+export function file< V extends AsyncArrayable<string>> (path: string, value: V): Promise<ProducedFile>
+export function file< V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile
+export function file< V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile {
+  const arr: readonly string[] | Promise<readonly string[]> = array<string, UniversalArrayable<string>>(value)
+
+  if ('then' in arr) {
+    // eslint-disable-next-line no-async-promise-executor, @typescript-eslint/no-misused-promises
+    return new Promise(async resolve => {
+      resolve({
+        path,
+        content: array(await arr).join('\n')
+      })
+    })
+  } else {
+    return {
+      path,
+      content: array(arr as string[]).join('\n')
+    }
   }
 }
+
+
 export interface ProducedFile {
   readonly content: string
   readonly path: string
 }
 
-export type Producer = (files: readonly string[]) => Promise<readonly ProducedFile[]>
+export type Producer = (files: readonly string[]) => (readonly ProducedFile[]) | Promise<readonly ProducedFile[]>
 
 const knownProducers: string[] = []
 
