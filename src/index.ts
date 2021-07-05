@@ -25,10 +25,10 @@ export type UniversalArrayable<T> =
   | Arrayable<T>
   | AsyncArrayable<T>
 
-export function array<T, V extends Arrayable<T>> (value: V): readonly T[]
-export function array<T, V extends AsyncArrayable<T>> (value: V): Promise<readonly T[]>
-export function array<T, V extends UniversalArrayable<T>> (value: V): readonly T[] | Promise<readonly T[]>
-export function array<T, V extends UniversalArrayable<T>> (value: V): readonly T[] | Promise<readonly T[]> {
+export function array<T> (value: Arrayable<T>): readonly T[]
+export function array<T> (value: AsyncArrayable<T>): Promise<readonly T[]>
+export function array<T> (value: UniversalArrayable<T>): readonly T[] | Promise<readonly T[]>
+export function array<T> (value: UniversalArrayable<T>): readonly T[] | Promise<readonly T[]> {
   const iterable: Iterable<T> | AsyncIterable<T> = typeof value === 'function'
     ? value()
     : value
@@ -53,11 +53,11 @@ export function array<T, V extends UniversalArrayable<T>> (value: V): readonly T
   return arr
 }
 
-export function file< V extends Arrayable<string>> (path: string, value: V): ProducedFile
-export function file< V extends AsyncArrayable<string>> (path: string, value: V): Promise<ProducedFile>
-export function file< V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile
-export function file< V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile {
-  const arr: readonly string[] | Promise<readonly string[]> = array<string, UniversalArrayable<string>>(value)
+export function file<V extends Arrayable<string>> (path: string, value: V): ProducedFile
+export function file<V extends AsyncArrayable<string>> (path: string, value: V): Promise<ProducedFile>
+export function file<V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile
+export function file<V extends UniversalArrayable<string>> (path: string, value: V): Promise<ProducedFile> | ProducedFile {
+  const arr = array(value)
 
   if ('then' in arr) {
     // eslint-disable-next-line no-async-promise-executor, @typescript-eslint/no-misused-promises
@@ -70,7 +70,7 @@ export function file< V extends UniversalArrayable<string>> (path: string, value
   } else {
     return {
       path,
-      content: array(arr as string[]).join('\n')
+      content: array(arr).join('\n')
     }
   }
 }
