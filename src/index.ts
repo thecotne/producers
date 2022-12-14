@@ -161,7 +161,9 @@ async function executeProducers (dir: string, check: boolean, watch: boolean): P
   const changes = Bacon.fromBinder<{readonly path: string, readonly time: number | null, readonly event: string}>(sink => {
     const wp = new Watchpack({})
 
-    wp.watch([], [dir])
+    wp.watch({
+      directories: [dir]
+    })
     wp.on('change', (path: string, time: number, event: string) => void sink({ path, time, event }))
 
     return () => void wp.close()
