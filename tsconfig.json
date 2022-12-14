@@ -3,7 +3,7 @@
     "importHelpers": true,
     "jsx": "react",
     "module": "CommonJS",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "lib": ["ESNext", "DOM"],
     "noEmit": true,
@@ -17,8 +17,5 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true
   },
-  "include": [
-    "src/*",
-    "src/**/*"
-  ]
+  "include": ["src", "example"]
 }

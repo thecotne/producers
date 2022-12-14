@@ -7,6 +7,7 @@ export default createProducer(async files => {
       yield "// Auto Generated, Don't Modify Manually"
       yield '// cotne123'
       yield ''
+      yield 'export {}'
     })
   })
 })
